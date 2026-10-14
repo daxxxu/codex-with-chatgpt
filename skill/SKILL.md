@@ -108,6 +108,17 @@ that close the tab, hide the window, or stall on the settings page.
    `documentation()` if it is already bound. Never `getDefault()`, `getForUrl()`,
    or Computer Use.
 
+   On current desktop builds, read the available `control-in-app-browser`
+   skill and import `setupBrowserRuntime` from the absolute
+   `scripts/browser-client.mjs` path in that installed plugin. Bind the
+   returned handle: `const agent = await setupBrowserRuntime()`; do not
+   assume it creates a global `agent`. Use `agent.browsers.get("iab")` and
+   read that browser's complete `documentation()` once before interaction.
+   Do not hard-code a plugin version or substitute another plugin's cache.
+   A missing module or disconnected control handle is distinct from a
+   ChatGPT page error. Diagnose via the official browser troubleshooting
+   guidance and [browser runtime recovery](../docs/browser-runtime-recovery.md).
+
 2. **One tab.** Create the ChatGPT tab once (`tabs.new()`). After that, only
    `tab.goto(...)` to switch URLs. If the tab still exists, claim it — never
    open a second ChatGPT tab. Do not `goto` the URL you are already on.
@@ -181,9 +192,15 @@ that close the tab, hide the window, or stall on the settings page.
 
 - The codex-with-chatgpt checkout lives at: `<ACTUAL_CHECKOUT_PATH>`
   (installer/update MUST replace this line in the installed Skill with the user's actual checkout path.)
+- Codex home: use a non-empty `CODEX_HOME` when set; otherwise use
+  `~/.codex` (`%USERPROFILE%\.codex` on Windows). Keep existing storage
+  locations and compatibility entries; do not migrate running data to update
+  this Skill. In the commands below, `<codex-home>` means this resolved path.
 - CLI: let `<checkout>` mean the path on the previous line; run
   `node "<checkout>/bin/c2c.js" <command>` (or `c2c <command>` if globally linked).
-  All commands support `--json` for parsing.
+  Inspection commands such as `doctor` and `session` support `--json`.
+  Check the specific subcommand's help before adding it: `session set`
+  and `record` do not accept `--json` in this version.
 - If the checkout has no `node_modules` or no `dist/`, first run
   `corepack pnpm install && corepack pnpm build` inside it.
 - For commands that act on the user's project (`setup`, `doctor`, `session`,
@@ -203,7 +220,7 @@ commands (both are cheap / cached; never mention them unless an update exists):
 2. `c2c sandbox-allow --json` (do not pass `-w`) — writes the C2C state directory into Codex's
    sandbox `writable_roots` (macOS: `~/Library/Application Support/codex-with-chatgpt`;
    Windows: `%LOCALAPPDATA%\codex-with-chatgpt`; config file is
-   `~/.codex/config.toml` on both, or `%USERPROFILE%\.codex\config.toml` on Windows).
+   `<codex-home>/config.toml`; see **Locations**).
    If already allowlisted, this is a no-op and does not trigger elevation.
 
 - `{ "updateAvailable": false }` → continue silently. Never mention the check.
@@ -218,7 +235,7 @@ Inside the checkout directory (see Locations):
 1. `git pull --ff-only` (if it fails due to local edits: `git stash && git pull --ff-only`).
 2. `corepack pnpm install && corepack pnpm build`.
 3. Re-install the Skill: copy `skill/SKILL.md` to
-   `~/.codex/skills/codex-with-chatgpt/SKILL.md`, then fix the "checkout lives at:"
+   `<codex-home>/skills/codex-with-chatgpt/SKILL.md`, then fix the "checkout lives at:"
    line in the copy to the actual checkout path.
 4. `c2c sandbox-allow --json` (so existing installs pick up the sandbox allowlist),
    then `c2c restart -w <workspace>` so the bridge runs the new code, then
@@ -715,6 +732,13 @@ the previous public address is gone. Doctor already started a new one.
 
 ## Recovery map
 
+For networks where the default transport fails, the CLI supports
+`C2C_TUNNEL_PROTOCOL=auto|quic|http2`. Set an override only for the C2C
+process and only when diagnostics justify it; preserve a healthy connection
+and its existing address. Never change the machine-wide environment merely
+to repair one workspace. Run regression tests without an inherited override:
+the transport tests exercise their own protocol cases.
+
 | Symptom | Action |
 | --- | --- |
 | Bridge not running | `c2c start` (doctor does this automatically) |
@@ -725,6 +749,7 @@ the previous public address is gone. Doctor already started a new one.
 | Same explicit ChatGPT setup/reconnect browser configuration step fails twice after repair | Stop automating ChatGPT settings and use **Guided manual ChatGPT setup fallback**. Do not count browser/js timeout, loading/generating, or login/2FA waiting as failures. |
 | Port conflict | handled automatically; never surface to the user |
 | Every new chat “repairs” / cannot write the log or settings directory | `c2c sandbox-allow --json` (once). Do not ask the user. |
+| Browser plugin repeatedly says Install, or the browser control module is missing | Follow the official browser troubleshooting guidance and `docs/browser-runtime-recovery.md`. Verify installed/enabled status, plugin-source synchronization, and real page control. Do not recreate a healthy C2C connector to repair the desktop browser. |
 | cloudflared missing | install it yourself (brew/winget), then retry |
 | Sidebar has no「项目」 | Ask the user to hover「聊天」, click the …, choose「按项目整理」 |
 | Collection page is the wrong Project | Ask the user to open the named collection and say「已找到」, or accept long-chat |
